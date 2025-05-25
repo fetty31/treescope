@@ -1,0 +1,14 @@
+<launch>
+
+    <arg name="bag_file" default="RAW-UCM-0323-01.bag" doc="file name to use for the recorded bag file"/>
+    <arg name="rviz" default="true"/>
+
+    <include file="$(find ouster_ros)/launch/replay_ugv.launch">
+        <arg name="bag_file" default="$(arg bag_file)"/>
+    </include>
+
+    <include file="$(find treescope)/launch/pipeline.launch"/>
+
+    <node name="$(anon rviz)" pkg="rviz" type="rviz" args="-d $(find treescope)/rviz/ugv_template.rviz" if="$(arg rviz)"/>
+
+</launch>

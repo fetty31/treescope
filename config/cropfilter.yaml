@@ -1,0 +1,5 @@
+# Crop Filter config
+
+CropFilter:
+  Min: [ -0.7, -0.7, -0.7 ]  # [m]
+  Max: [ 0.7, 0.7, 0.7 ]     # [m]

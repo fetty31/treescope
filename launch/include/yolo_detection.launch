@@ -1,0 +1,20 @@
+<launch>
+
+  <arg name="node_name"              default="yolo_detector"/>
+  <arg name="output"                 default="screen"/>
+  <arg name="image_raw_topic"        default="/rsense/color/image_raw/compressed"/>
+  <arg name="camera_info_topic"      default="/rsense/color/camera_info"/>
+  <arg name="ml_models_path"         default="$(find treescope)/models/yolo11n.pt" />
+
+  <!-- Launching Nodes -->
+  <node pkg="treescope" 
+        type="YOLO_detect.py" 
+        name="$(arg node_name)" 
+        output="$(arg output)">
+    <param name="~ml_models_path"  value="$(arg ml_models_path)"/>
+    <param name="~input_is_raw"    value="false"/>
+    <remap from="~input_image"     to="$(arg image_raw_topic)"/>
+    <remap from="~camera_info"     to="$(arg camera_info_topic)"/>
+  </node>
+
+</launch>

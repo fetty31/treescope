@@ -1,0 +1,11 @@
+# Euclidian Clustering config
+
+MinNumPoints: 25      # n points
+MaxNumPoints: 25000   # n points
+Tolerance: 0.2        # [m]
+
+WIDTH_THRESHOLD: 10.0            # if cluster's widht (y-axis) is higher than this, it will be filtered [m]
+HEIGHT_THRESHOLD: 30.0           # if cluster's height (z-axis) is higher than this, it will be filtered [m]
+LENGTH_THRESHOLD: 10.0           # if cluster's length (x-axis) is higher than this, it will be filtered [m]
+
+HEIGHT_MIN: 2.0                # if cluster's height (z-axis) is less than this, it will be filtered [m]

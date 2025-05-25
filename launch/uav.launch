@@ -1,0 +1,19 @@
+<launch>
+
+    <arg name="bag_file" default="RAW-UCM-0523U-04.bag" doc="file name to use for the recorded bag file"/>
+    <arg name="rviz" default="true"/>
+
+    <include file="$(find ouster_ros)/launch/replay_uav.launch">
+        <arg name="bag_file" default="$(arg bag_file)"/>
+    </include>
+
+    <node pkg="treescope" type="image_dtype" name="image_dtype_left" ns="left_image_process">
+        <remap from="/camera/image_raw" to="/ovc/left/compressed"/>
+        <remap from="/camera/image_dtype_raw" to="/ovc/left/image_raw"/>
+    </node>
+
+    <include file="$(find treescope)/launch/pipeline.launch"/>
+
+    <node name="$(anon rviz)" pkg="rviz" type="rviz" args="-d $(find treescope)/rviz/template.rviz" if="$(arg rviz)"/>
+
+</launch>

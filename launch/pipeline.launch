@@ -1,0 +1,21 @@
+<launch>
+
+    <include file="$(find fast_limo)/launch/treescope.launch"/>
+
+    <include file="$(find treescope)/launch/include/cropfilter.launch"/>
+
+    <include file="$(find patchworkpp)/launch/patchworkpp.launch">
+        <arg name="cloud_topic" default="/filtered_cloud"/>
+    </include>
+
+    <include file="$(find treescope)/launch/include/adaptive_clustering.launch">
+        <arg name="input_topic" default="/ground_segmentation/nonground"/>
+    </include>
+
+    <node pkg="treescope" type="accumulator" name="accumulator">
+        <param name="save_path" value="$(find treescope)/maps/"/>
+    </node>
+
+    <!-- <include file="$(find treescope)/launch/include/tracking.launch"/> -->
+
+</launch>

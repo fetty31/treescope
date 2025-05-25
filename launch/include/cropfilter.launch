@@ -1,0 +1,7 @@
+<launch>
+
+    <node pkg="treescope" type="cropfilter" name="cropfilter">
+        <rosparam command="load" file="$(find treescope)/config/cropfilter.yaml"/>
+    </node>
+
+</launch>

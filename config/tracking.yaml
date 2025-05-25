@@ -1,0 +1,6 @@
+Thresholds:
+  Velocity: 0.5
+  Age: 5
+RobotDimensions:
+  Lenght: 0.7
+  Width: 0.7

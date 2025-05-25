@@ -1,0 +1,10 @@
+<launch>
+
+    <arg name="input_topic" default="no_ground_cloud"/>
+
+    <node pkg="treescope" type="adaptive_clustering" name="euc_clustering" output="screen">
+        <remap from="/no_ground_cloud" to="$(arg input_topic)"/>
+        <rosparam command="load" file="$(find treescope)/config/clustering.yaml"/>
+    </node>
+
+</launch>
