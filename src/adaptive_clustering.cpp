@@ -131,7 +131,7 @@ private:
 
             // Compute and publish centroid
             Eigen::Vector3f centroid;
-            computeLowCentroid(cluster, 0.5f, centroid);
+            computeLowCentroid(cluster, 0.1f, centroid);
 
             geometry_msgs::PointStamped centroid_msg;
             centroid_msg.header = input->header;

@@ -1,6 +1,6 @@
 <launch>
 
-    <node pkg="treescope" type="tracking" name="tracking" output="screen">
+    <node pkg="treescope" type="tracking" name="tracking" output="log">
         <rosparam file="$(find treescope)/config/tracking.yaml"/>
     </node>
 

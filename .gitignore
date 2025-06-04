@@ -1,2 +1,4 @@
 *.pt
 scripts/__pycache__/*
+models/*
+maps/*

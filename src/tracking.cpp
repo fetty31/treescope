@@ -1,9 +1,16 @@
 #include <ros/ros.h>
 
-#include <pcl_ros/point_cloud.h>
 #include <pcl_conversions/pcl_conversions.h>
-#include <pcl/common/centroid.h>
+#include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
+#include <pcl/io/pcd_io.h>
+#include <pcl/pcl_config.h>
+#include <pcl_ros/impl/transforms.hpp>
+#include <pcl_ros/point_cloud.h>
+#include <pcl_ros/transforms.h> 
+
+#include <tf2/convert.h>
+#include <tf2_ros/transform_broadcaster.h>
 
 #include <Eigen/Dense>
 
@@ -34,7 +41,7 @@ struct TrackedObject {
     double time;
     Eigen::VectorXd velocity;
     Eigen::VectorXd abs_velocity;
-    Eigen::VectorXd last_velocity;
+    PointCloudT cloud;
     bool is_dynamic;
     int age = 0;
     int dynamic_cooldown = 0;
@@ -46,6 +53,7 @@ std::map<int, TrackedObject> tracked_objects;
 
 double robot_vx = 0.0, robot_vy = 0.0, robot_vz = 0.0;
 double imu_angular_x = 0.0, imu_angular_y = 0.0, imu_angular_z = 0.0;
+Eigen::Affine3d transform_to_global;
 
 double velocity_thres;
 double robot_length, robot_width;
@@ -58,9 +66,11 @@ void odomCallback(const nav_msgs::OdometryConstPtr& msg) {
     imu_angular_x = msg->twist.twist.angular.x;
     imu_angular_y = msg->twist.twist.angular.y;
     imu_angular_z = msg->twist.twist.angular.z;
+
+    tf2::fromMsg(msg->pose.pose, transform_to_global);
 }
 
-void associateCentroids(const std::vector<geometry_msgs::PointStamped>& centroids, double dt) {
+void associateCentroids(const std::vector<std::pair<geometry_msgs::PointStamped,PointCloudT>>& centroids, double dt) {
     std::vector<bool> matched(centroids.size(), false);
     std::map<int, TrackedObject> new_tracked_objects;
 
@@ -71,14 +81,14 @@ void associateCentroids(const std::vector<geometry_msgs::PointStamped>& centroid
     for (const auto& [id, obj] : tracked_objects) {
         tracked_ids.push_back(id);
         for (size_t row = 0; row < centroids.size(); ++row) {
-            double dx = centroids[row].point.x - obj.position.point.x;
-            double dy = centroids[row].point.y - obj.position.point.y;
-            double dz = centroids[row].point.z - obj.position.point.z;
+            double dx = centroids[row].first.point.x - obj.position.point.x;
+            double dy = centroids[row].first.point.y - obj.position.point.y;
+            double dz = centroids[row].first.point.z - obj.position.point.z;
             double dist = std::sqrt(dx * dx + dy * dy + dz * dz);
 
-            double vel_dx = centroids[row].point.x - (obj.position.point.x + obj.velocity[0] * dt);
-            double vel_dy = centroids[row].point.y - (obj.position.point.y + obj.velocity[1] * dt);
-            double vel_dz = centroids[row].point.z - (obj.position.point.y + obj.velocity[2] * dt);
+            double vel_dx = centroids[row].first.point.x - (obj.position.point.x + obj.velocity[0] * dt);
+            double vel_dy = centroids[row].first.point.y - (obj.position.point.y + obj.velocity[1] * dt);
+            double vel_dz = centroids[row].first.point.z - (obj.position.point.y + obj.velocity[2] * dt);
             double vel_dist = std::sqrt(vel_dx * vel_dx + vel_dy * vel_dy + vel_dz * vel_dz);
 
             // cost_matrix[row][col] = 0.9 * dist + 0.1 * vel_dist;
@@ -98,7 +108,7 @@ void associateCentroids(const std::vector<geometry_msgs::PointStamped>& centroid
             TrackedObject& obj = tracked_objects[best_id];
 
             Eigen::VectorXd measurement(3);
-            measurement << centroids[row].point.x, centroids[row].point.y, centroids[row].point.z;
+            measurement << centroids[row].first.point.x, centroids[row].first.point.y, centroids[row].first.point.z;
 
             Eigen::MatrixXd A(6, 6);
             A << 1, 0, 0, dt, 0, 0,
@@ -119,9 +129,10 @@ void associateCentroids(const std::vector<geometry_msgs::PointStamped>& centroid
             obj.abs_velocity(1) = obj.velocity(1) + robot_vy + robot_length*imu_angular_z;
             obj.abs_velocity(2) = obj.velocity(2) + robot_vz;
 
-            obj.last_velocity = obj.velocity;
-            obj.position = centroids[row];
-            obj.time = centroids[row].header.stamp.toSec();
+            obj.cloud += centroids[row].second;
+
+            obj.position = centroids[row].first;
+            obj.time = centroids[row].first.header.stamp.toSec();
             obj.age++;
 
             if( (std::hypot(obj.abs_velocity(0), obj.abs_velocity(1)) > velocity_thres) && (obj.age > age_thres) )
@@ -166,14 +177,15 @@ void associateCentroids(const std::vector<geometry_msgs::PointStamped>& centroid
 
             obj.kf = KalmanFilter(dt, A, C, Q, R, P);
             Eigen::VectorXd x0(6);
-            x0 << centroids[i].point.x, centroids[i].point.y, centroids[i].point.z, 0, 0, 0;
-            obj.kf.init(centroids[i].header.stamp.toSec(), x0);
+            x0 << centroids[i].first.point.x, centroids[i].first.point.y, centroids[i].first.point.z, 0, 0, 0;
+            obj.kf.init(centroids[i].first.header.stamp.toSec(), x0);
 
-            obj.position = centroids[i];
-            obj.time = centroids[i].header.stamp.toSec();
+            obj.cloud = centroids[i].second;
+
+            obj.position = centroids[i].first;
+            obj.time = centroids[i].first.header.stamp.toSec();
             obj.velocity = Eigen::VectorXd::Zero(3);
             obj.abs_velocity = obj.velocity;
-            obj.last_velocity = obj.velocity;
 
             new_tracked_objects[obj.id] = obj;
         }
@@ -184,6 +196,8 @@ void associateCentroids(const std::vector<geometry_msgs::PointStamped>& centroid
 
 void publishMarkers() {
     visualization_msgs::MarkerArray marker_array;
+    treescope::ClusterArray cluster_array;
+
     double vx, vy, vz;
 
     for (const auto& [id, obj] : tracked_objects) {
@@ -211,8 +225,10 @@ void publishMarkers() {
         pos_marker.scale.y = 0.4;
         pos_marker.scale.z = 0.4;
         pos_marker.color.a = 1.0;
-        pos_marker.color.r = (obj.is_dynamic) ? 0.0 : 1.0;
-        pos_marker.color.g = (obj.is_dynamic) ? 1.0 : 0.0;
+        // pos_marker.color.r = (obj.is_dynamic) ? 0.0 : 1.0;
+        // pos_marker.color.g = (obj.is_dynamic) ? 1.0 : 0.0;
+        pos_marker.color.r = 0.0;
+        pos_marker.color.g = 1.0;
         pos_marker.color.b = 0.0;
         pos_marker.lifetime = ros::Duration(0.2);
         marker_array.markers.push_back(pos_marker);
@@ -237,9 +253,21 @@ void publishMarkers() {
         text_marker.lifetime = ros::Duration(0.2);
         marker_array.markers.push_back(text_marker);
 
+        treescope::Cluster cluster_msg;
+        sensor_msgs::PointCloud2 pcl_msg;
+        pcl::toROSMsg(obj.cloud, pcl_msg);
+
+        cluster_msg.id = obj.id;
+        cluster_msg.cloud = pcl_msg;
+        cluster_msg.centroid.x = obj.position.point.x; 
+        cluster_msg.centroid.y = obj.position.point.y; 
+        cluster_msg.centroid.z = obj.position.point.z; 
+        cluster_array.clusters.push_back(cluster_msg);
+
     }
 
     marker_pub.publish(marker_array);
+    cluster_pub.publish(cluster_array);
 }
 
 void clusterCallback(const treescope::ClusterArray::ConstPtr& cluster_msg) {
@@ -251,8 +279,7 @@ void clusterCallback(const treescope::ClusterArray::ConstPtr& cluster_msg) {
     if(cluster_msg->clusters.size() < 1)
         return;
 
-    std::vector<geometry_msgs::PointStamped> centroids;
-    centroids.resize(cluster_msg->clusters.size());
+    std::vector<std::pair<geometry_msgs::PointStamped,PointCloudT>> centroids;
 
     geometry_msgs::PointStamped centroid;
     centroid.header = cluster_msg->header;
@@ -260,7 +287,15 @@ void clusterCallback(const treescope::ClusterArray::ConstPtr& cluster_msg) {
         centroid.point.x = cluster_msg->clusters[i].centroid.x;
         centroid.point.y = cluster_msg->clusters[i].centroid.y;
         centroid.point.z = cluster_msg->clusters[i].centroid.z;
-        centroids[i] = centroid;
+
+        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
+        pcl::fromROSMsg(cluster_msg->clusters[i].cloud, *cloud);
+
+        // Transform pointcloud to global frame
+        pcl::transformPointCloud (*cloud, *cloud, transform_to_global);
+
+        if( (centroid.point.x != 0.0) && (centroid.point.y != 0.0) && (centroid.point.z != 0.0))
+            centroids.emplace_back(centroid, *cloud);
     }
 
     associateCentroids(centroids, dt);
@@ -281,7 +316,7 @@ int main(int argc, char** argv) {
     nh_priv.param<double>("RobotDimensions/Lenght", robot_length, 1.0);
     nh_priv.param<double>("RobotDimensions/Width", robot_width, 0.5);
 
-    ros::Subscriber cloud_sub = nh.subscribe(nh.getNamespace() + "/clusters", 1, clusterCallback);
+    ros::Subscriber cloud_sub = nh.subscribe(nh.getNamespace() + "/clusters", 100, clusterCallback);
     ros::Subscriber odom_sub = nh.subscribe(nh.getNamespace() + "/fast_limo/state", 1, odomCallback);
 
     ros::spin();

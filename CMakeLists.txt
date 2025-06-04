@@ -17,6 +17,7 @@ find_package(catkin REQUIRED COMPONENTS
   cv_bridge
   sensor_msgs
   std_msgs
+  std_srvs
   visualization_msgs
   message_generation
 )
@@ -54,6 +55,7 @@ catkin_package(
     tf2_ros
     image_transport
     cv_bridge
+    std_srvs
     pcl_conversions
     message_runtime
   DEPENDS EIGEN3 PCL
