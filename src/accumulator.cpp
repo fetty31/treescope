@@ -37,9 +37,11 @@ public:
         clear_service_ = nh_.advertiseService("/accumulator/save_clusters", &Accumulator::saveMap, this);
 
         ros::NodeHandle nh_p("~");
-        nh_p.param<std::string>("save_path", save_path, "/home/fetty/Desktop/UPC/computer_vision/project/catkin_ws/src/treescope/maps/");
+        nh_p.param<std::string>("save_path", save_path, "");
 
         map = pcl::PointCloud<pcl::PointXYZ>::Ptr (boost::make_shared<pcl::PointCloud<pcl::PointXYZ>>());
+
+        voxel_filter.setLeafSize(0.5, 0.5, 0.5);
 
         ROS_WARN("TREESCOPE::ACCUMULATOR saving accumulated pointcloud in %s", save_path.c_str());
     }
@@ -55,14 +57,17 @@ private:
         // Transform pointcloud to global frame
         pcl::transformPointCloud (*cloud, *cloud, transform);
 
-        *map += *cloud;
-
         // Publish clustered cloud
         sensor_msgs::PointCloud2 output;
         pcl::toROSMsg(*cloud, output);
         output.header = input->header;
         output.header.frame_id = global_frame;
         cloud_pub_.publish(output);
+
+        voxel_filter.setInputCloud(cloud);
+        voxel_filter.filter(*cloud);
+
+        *map += *cloud;
 
         mtx_.unlock();
     }
@@ -96,13 +101,7 @@ private:
         res.success = true;
         res.message = "All ok";
 
-        pcl::VoxelGrid<pcl::PointXYZ> voxel_filter;
-        voxel_filter.setLeafSize(0.5, 0.5, 0.5);
-        voxel_filter.setInputCloud(map);
-        voxel_filter.filter(*map);
-
         std::cout << "Before Clustering\n";
-
 
         // Euclidean clustering
         pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
@@ -110,7 +109,7 @@ private:
         std::vector<pcl::PointIndices> cluster_indices;
         pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
         ec.setClusterTolerance(0.2); // 20cm
-        ec.setMinClusterSize(100);
+        ec.setMinClusterSize(10);
         ec.setMaxClusterSize(25000);
         ec.setSearchMethod(tree);
         ec.setInputCloud(map);
@@ -130,7 +129,7 @@ private:
 
             std::cout << "cluster pointcloud filled\n";
 
-            std::string file_name = "cluster_" + std::to_string(id++) + ".pcd";
+            std::string file_name = "cluster_" + std::to_string(++id) + ".pcd";
             if(pcl::io::savePCDFileBinary(save_path+file_name, *cluster)!=0){
                 ROS_ERROR("Treescope::Accumulator:: Failed to save pcd to %s", save_path.c_str());
                 res.success = false;
@@ -156,6 +155,8 @@ private:
     Eigen::Affine3d transform;
 
     pcl::PointCloud<pcl::PointXYZ>::Ptr map;
+
+    pcl::VoxelGrid<pcl::PointXYZ> voxel_filter;
 
     std::mutex mtx_;
 

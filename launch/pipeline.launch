@@ -12,9 +12,9 @@
         <arg name="input_topic" default="/ground_segmentation/nonground"/>
     </include>
 
-    <!-- <node pkg="treescope" type="accumulator" name="accumulator">
+    <node pkg="treescope" type="accumulator" name="accumulator">
         <param name="save_path" value="$(find treescope)/maps/"/>
-    </node> -->
+    </node>
 
     <include file="$(find treescope)/launch/include/tracking.launch"/>
 
